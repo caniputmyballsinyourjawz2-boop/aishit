@@ -6,10 +6,10 @@
 @inject IFileProcessingService FileProcessor
 @rendermode InteractiveServer
 
-<PageTitle>AI Summarizer</PageTitle>
+<PageTitle>AI Study Assistant</PageTitle>
 
 <div class="container mt-4">
-    <h3>📝 Text Summarizer</h3>
+    <h3>🎓 AI Study Assistant</h3>
     
     <div class="card mt-3">
         <div class="card-body">
@@ -25,7 +25,7 @@
                     accept=".txt,.pdf,.docx"
                     disabled="@isProcessing" />
                 <small class="text-muted">
-                    Supported formats: PDF, DOCX, TXT (Max 10MB)
+                    Supported formats: PDF, DOCX, TXT (Max 50MB)
                 </small>
             </div>
 
@@ -47,7 +47,7 @@
                 <textarea 
                     class="form-control" 
                     id="textInput" 
-                    rows="10" 
+                    rows="8" 
                     @bind="inputText"
                     placeholder="Paste your text here..."
                     disabled="@isProcessing">
@@ -57,40 +57,52 @@
                 </small>
             </div>
             
-            <div class="mb-2">
+            <div class="mb-3">
                 <button class="btn btn-sm btn-outline-secondary" @onclick="LoadSampleText" disabled="@isProcessing">
                     Load Sample Text
                 </button>
             </div>
             
-            <div class="btn-group">
+            <!-- Action Buttons -->
+            <div class="d-flex flex-wrap gap-2">
                 <button 
                     class="btn btn-primary" 
                     @onclick="GenerateSummary"
                     disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
-                    @if (isProcessing)
+                    @if (isProcessing && currentAction == "summary")
                     {
                         <span class="spinner-border spinner-border-sm me-2"></span>
                     }
-                    Generate Summary
+                    📄 Summarize
                 </button>
                 
                 <button 
                     class="btn btn-success" 
-                    @onclick="GenerateSummaryStreaming"
+                    @onclick="GenerateFlashcards"
                     disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
-                    @if (isStreaming)
+                    @if (isProcessing && currentAction == "flashcards")
                     {
                         <span class="spinner-border spinner-border-sm me-2"></span>
                     }
-                    Stream Summary
+                    🎴 Create Flashcards
+                </button>
+                
+                <button 
+                    class="btn btn-info" 
+                    @onclick="GenerateQuiz"
+                    disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                    @if (isProcessing && currentAction == "quiz")
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    📝 Generate Quiz
                 </button>
                 
                 <button 
                     class="btn btn-secondary" 
                     @onclick="Clear"
                     disabled="@isProcessing">
-                    Clear All
+                    🗑️ Clear All
                 </button>
             </div>
             
@@ -110,6 +122,7 @@
         </div>
     </div>
     
+    <!-- Summary Display -->
     @if (summary != null)
     {
         <div class="card mt-4">
@@ -143,31 +156,227 @@
         </div>
     }
     
-    @if (isStreaming && !string.IsNullOrEmpty(streamedContent))
+    <!-- Flashcards Display -->
+    @if (flashcards?.Any() == true)
     {
         <div class="card mt-4">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0">📄 Summary (Streaming...)</h5>
+                <h5 class="mb-0">🎴 Flashcards (@flashcards.Count)</h5>
             </div>
             <div class="card-body">
-                <div style="white-space: pre-wrap;">@streamedContent</div>
+                <div class="row">
+                    @foreach (var (flashcard, index) in flashcards.Select((f, i) => (f, i)))
+                    {
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100 flashcard @(flippedCards.Contains(index) ? "flipped" : "")" 
+                                 @onclick="() => FlipCard(index)"
+                                 style="cursor: pointer;">
+                                <div class="card-body">
+                                    @if (!flippedCards.Contains(index))
+                                    {
+                                        <div class="flashcard-front">
+                                            <h6 class="text-primary">Question:</h6>
+                                            <p>@flashcard.Front</p>
+                                            <small class="text-muted">Click to reveal answer</small>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="flashcard-back">
+                                            <h6 class="text-success">Answer:</h6>
+                                            <p>@flashcard.Back</p>
+                                            <small class="text-muted">Click to see question</small>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+    
+    <!-- Quiz Display -->
+    @if (quizQuestions?.Any() == true)
+    {
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">📝 Quiz (@quizQuestions.Count Questions)</h5>
+                @if (quizSubmitted)
+                {
+                    var score = CalculateScore();
+                    <p class="mb-0">Score: @score.correct / @quizQuestions.Count (@score.percentage.ToString("F0")%)</p>
+                }
+            </div>
+            <div class="card-body">
+                @foreach (var (question, qIndex) in quizQuestions.Select((q, i) => (q, i)))
+                {
+                    var isCorrect = quizSubmitted && IsAnswerCorrect(qIndex, question);
+                    <div class="card mb-3 @(quizSubmitted ? (isCorrect ? "border-success" : "border-danger") : "")">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h6>Question @(qIndex + 1):</h6>
+                                <span class="badge bg-secondary">@GetQuestionTypeLabel(question.Type)</span>
+                            </div>
+                            <p class="fw-bold">@question.Question</p>
+                            
+                            @if (question.Type == QuestionType.MultipleChoice || question.Type == QuestionType.ScenarioBased)
+                            {
+                                @foreach (var (option, oIndex) in question.Options.Select((o, i) => (o, i)))
+                                {
+                                    var optionIdxStr = oIndex.ToString();
+                                    <div class="form-check">
+                                        <input 
+                                            class="form-check-input" 
+                                            type="radio" 
+                                            name="question_@qIndex" 
+                                            id="q@(qIndex)_o@(oIndex)"
+                                            disabled="@quizSubmitted"
+                                            checked="@(selectedAnswers.ContainsKey(qIndex) && selectedAnswers[qIndex] == optionIdxStr)"
+                                            @onchange="() => SelectAnswer(qIndex, optionIdxStr)" />
+                                        <label class="form-check-label @(quizSubmitted && oIndex == question.CorrectIndex ? "text-success fw-bold" : "")" for="q@(qIndex)_o@(oIndex)">
+                                            @option
+                                            @if (quizSubmitted && oIndex == question.CorrectIndex)
+                                            {
+                                                <span class="badge bg-success ms-2">✓ Correct</span>
+                                            }
+                                        </label>
+                                    </div>
+                                }
+                            }
+                            else if (question.Type == QuestionType.TrueFalse)
+                            {
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="question_@qIndex" 
+                                        id="q@(qIndex)_true"
+                                        disabled="@quizSubmitted"
+                                        checked="@(selectedAnswers.ContainsKey(qIndex) && selectedAnswers[qIndex] == "true")"
+                                        @onchange='() => SelectAnswer(qIndex, "true")' />
+                                    <label class="form-check-label @(quizSubmitted && question.CorrectBoolean ? "text-success fw-bold" : "")" for="q@(qIndex)_true">
+                                        True
+                                        @if (quizSubmitted && question.CorrectBoolean)
+                                        {
+                                            <span class="badge bg-success ms-2">✓ Correct</span>
+                                        }
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="question_@qIndex" 
+                                        id="q@(qIndex)_false"
+                                        disabled="@quizSubmitted"
+                                        checked="@(selectedAnswers.ContainsKey(qIndex) && selectedAnswers[qIndex] == "false")"
+                                        @onchange='() => SelectAnswer(qIndex, "false")' />
+                                    <label class="form-check-label @(quizSubmitted && !question.CorrectBoolean ? "text-success fw-bold" : "")" for="q@(qIndex)_false">
+                                        False
+                                        @if (quizSubmitted && !question.CorrectBoolean)
+                                        {
+                                            <span class="badge bg-success ms-2">✓ Correct</span>
+                                        }
+                                    </label>
+                                </div>
+                            }
+                            else if (question.Type == QuestionType.Identification)
+                            {
+                                <div class="mb-2">
+                                    <input 
+                                        type="text" 
+                                        class="form-control @(quizSubmitted ? (isCorrect ? "is-valid" : "is-invalid") : "")"
+                                        placeholder="Type your answer here..."
+                                        disabled="@quizSubmitted"
+                                        value="@(selectedAnswers.ContainsKey(qIndex) ? selectedAnswers[qIndex] : string.Empty)"
+                                        @onchange="(e) => SelectAnswer(qIndex, e.Value?.ToString() ?? string.Empty)" />
+                                </div>
+                                @if (quizSubmitted)
+                                {
+                                    <div class="alert alert-success mb-0">
+                                        <strong>Correct Answer:</strong> @question.CorrectAnswer
+                                    </div>
+                                }
+                            }
+                            
+                            @if (quizSubmitted)
+                            {
+                                <div class="alert @(isCorrect ? "alert-success" : "alert-danger") mt-2 mb-0">
+                                    @if (isCorrect)
+                                    {
+                                        <span class="fw-bold">✓ Correct!</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="fw-bold">✗ Incorrect</span>
+                                    }
+                                    <br />
+                                    <strong>Explanation:</strong> @question.Explanation
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                
+                @if (!quizSubmitted)
+                {
+                    <button class="btn btn-primary" @onclick="SubmitQuiz" disabled="@(selectedAnswers.Count != quizQuestions.Count)">
+                        Submit Quiz (@selectedAnswers.Count/@quizQuestions.Count answered)
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-secondary" @onclick="ResetQuiz">
+                        Retake Quiz
+                    </button>
+                }
             </div>
         </div>
     }
 </div>
 
+<style>
+    .flashcard {
+        transition: transform 0.3s;
+    }
+    
+    .flashcard:hover {
+        transform: scale(1.02);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .flashcard-front, .flashcard-back {
+        min-height: 120px;
+    }
+    
+    .gap-2 {
+        gap: 0.5rem;
+    }
+</style>
+
 @code {
     private string inputText = "";
     private Summary? summary;
-    private string streamedContent = "";
+    private List<Flashcard>? flashcards;
+    private List<QuizQuestion>? quizQuestions;
+    
     private bool isProcessing = false;
-    private bool isStreaming = false;
     private bool isUploadingFile = false;
     private string errorMessage = "";
     private string successMessage = "";
     private string uploadedFileName = "";
+    private string currentAction = "";
+    
+    // Flashcard state
+    private HashSet<int> flippedCards = new();
+    
+    // Quiz state
+    private Dictionary<int, string> selectedAnswers = new();
+    private bool quizSubmitted = false;
 
-    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    private const long MaxFileSize = 50 * 1024 * 1024; // 50MB
     
     private async Task HandleFileSelected(InputFileChangeEventArgs e)
     {
@@ -180,14 +389,12 @@
             var file = e.File;
             uploadedFileName = file.Name;
             
-            // Validate file size
             if (file.Size > MaxFileSize)
             {
-                errorMessage = $"File is too large. Maximum size is 10MB. Your file is {file.Size / 1024 / 1024}MB.";
+                errorMessage = $"File is too large. Maximum size is 50MB. Your file is {file.Size / 1024 / 1024}MB.";
                 return;
             }
             
-            // Validate file extension
             var extension = Path.GetExtension(file.Name).ToLower();
             if (extension != ".txt" && extension != ".pdf" && extension != ".docx")
             {
@@ -195,7 +402,6 @@
                 return;
             }
             
-            // Read and extract text from file
             using var stream = file.OpenReadStream(MaxFileSize);
             inputText = await FileProcessor.ExtractTextFromFileAsync(stream, file.Name);
             
@@ -221,6 +427,7 @@
     private async Task GenerateSummary()
     {
         isProcessing = true;
+        currentAction = "summary";
         errorMessage = "";
         successMessage = "";
         summary = null;
@@ -228,6 +435,7 @@
         try
         {
             summary = await AIService.SummarizeAsync(inputText);
+            successMessage = "Summary generated successfully!";
         }
         catch (Exception ex)
         {
@@ -239,40 +447,139 @@
         }
     }
     
-    private async Task GenerateSummaryStreaming()
+    private async Task GenerateFlashcards()
     {
-        isStreaming = true;
+        isProcessing = true;
+        currentAction = "flashcards";
         errorMessage = "";
         successMessage = "";
-        streamedContent = "";
-        summary = null;
+        flashcards = null;
+        flippedCards.Clear();
         
         try
         {
-            await foreach (var chunk in AIService.SummarizeStreamingAsync(inputText))
-            {
-                streamedContent += chunk;
-                StateHasChanged();
-            }
+            flashcards = await AIService.GenerateFlashcardsAsync(inputText, 10);
+            successMessage = $"Generated {flashcards.Count} flashcards!";
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error streaming summary: {ex.Message}";
+            errorMessage = $"Error generating flashcards: {ex.Message}";
         }
         finally
         {
-            isStreaming = false;
+            isProcessing = false;
         }
+    }
+    
+    private async Task GenerateQuiz()
+    {
+        isProcessing = true;
+        currentAction = "quiz";
+        errorMessage = "";
+        successMessage = "";
+        quizQuestions = null;
+        ResetQuiz();
+        
+        try
+        {
+            quizQuestions = await AIService.GenerateQuizAsync(inputText, 12);
+            successMessage = $"Generated {quizQuestions.Count} questions with mixed question types!";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error generating quiz: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+    
+    private void FlipCard(int index)
+    {
+        if (flippedCards.Contains(index))
+            flippedCards.Remove(index);
+        else
+            flippedCards.Add(index);
+    }
+    
+    private void SelectAnswer(int questionIndex, string answer)
+    {
+        if (!quizSubmitted)
+        {
+            selectedAnswers[questionIndex] = answer;
+        }
+    }
+    
+    private bool IsAnswerCorrect(int questionIndex, QuizQuestion question)
+    {
+        if (!selectedAnswers.ContainsKey(questionIndex))
+            return false;
+            
+        var userAnswer = selectedAnswers[questionIndex];
+        
+        return question.Type switch
+        {
+            QuestionType.MultipleChoice or QuestionType.ScenarioBased 
+                => int.TryParse(userAnswer, out int answerIndex) && answerIndex == question.CorrectIndex,
+            QuestionType.TrueFalse 
+                => bool.TryParse(userAnswer, out bool boolAnswer) && boolAnswer == question.CorrectBoolean,
+            QuestionType.Identification 
+                => userAnswer.Trim().Equals(question.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+    
+    private (int correct, double percentage) CalculateScore()
+    {
+        if (quizQuestions == null || quizQuestions.Count == 0)
+            return (0, 0);
+            
+        int correct = 0;
+        for (int i = 0; i < quizQuestions.Count; i++)
+        {
+            if (IsAnswerCorrect(i, quizQuestions[i]))
+                correct++;
+        }
+        
+        double percentage = (double)correct / quizQuestions.Count * 100;
+        return (correct, percentage);
+    }
+    
+    private void SubmitQuiz()
+    {
+        quizSubmitted = true;
+    }
+    
+    private void ResetQuiz()
+    {
+        selectedAnswers.Clear();
+        quizSubmitted = false;
+    }
+    
+    private string GetQuestionTypeLabel(QuestionType type)
+    {
+        return type switch
+        {
+            QuestionType.MultipleChoice => "Multiple Choice",
+            QuestionType.TrueFalse => "True/False",
+            QuestionType.Identification => "Identification",
+            QuestionType.ScenarioBased => "Scenario-Based",
+            _ => "Unknown"
+        };
     }
     
     private void Clear()
     {
         inputText = "";
         summary = null;
-        streamedContent = "";
+        flashcards = null;
+        quizQuestions = null;
         errorMessage = "";
         successMessage = "";
         uploadedFileName = "";
+        flippedCards.Clear();
+        ResetQuiz();
     }
     
     private void LoadSampleText()

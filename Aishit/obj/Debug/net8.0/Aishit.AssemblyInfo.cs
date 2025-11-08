@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aishit")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f2e084ea70a075d1cb831cf3afd5bcf749f9b668")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8ba26e88bb1b771119f90f0e1cde485c083ffbcd")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aishit")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aishit")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
