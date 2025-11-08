@@ -1,0 +1,29 @@
+{
+  "Files": [
+    {
+      "Id": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/projectbundle/Aishit.bundle.scp.css",
+      "PackagePath": "staticwebassets/Aishit.bundle.scp.css"
+    },
+    {
+      "Id": "/workspaces/aishit/Aishit/wwwroot/app.css",
+      "PackagePath": "staticwebassets/app.css"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.Aishit.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.build.Aishit.props",
+      "PackagePath": "build\\Aishit.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildMultiTargeting.Aishit.props",
+      "PackagePath": "buildMultiTargeting\\Aishit.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildTransitive.Aishit.props",
+      "PackagePath": "buildTransitive\\Aishit.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

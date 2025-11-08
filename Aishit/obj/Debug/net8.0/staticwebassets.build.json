@@ -1,0 +1,77 @@
+{
+  "Version": 1,
+  "Hash": "cB5xcJAQDSknRpttfjhkll1Yz3hmP2wBkPDEcR2GrSY=",
+  "Source": "Aishit",
+  "BasePath": "_content/Aishit",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "Aishit/wwwroot",
+      "Source": "Aishit",
+      "ContentRoot": "/workspaces/aishit/Aishit/wwwroot/",
+      "BasePath": "_content/Aishit",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [
+    {
+      "Identity": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/bundle/Aishit.styles.css",
+      "SourceId": "Aishit",
+      "SourceType": "Computed",
+      "ContentRoot": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/bundle/",
+      "BasePath": "_content/Aishit",
+      "RelativePath": "Aishit.styles.css",
+      "AssetKind": "All",
+      "AssetMode": "CurrentProject",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "ScopedCss",
+      "AssetTraitValue": "ApplicationBundle",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/bundle/Aishit.styles.css"
+    },
+    {
+      "Identity": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/projectbundle/Aishit.bundle.scp.css",
+      "SourceId": "Aishit",
+      "SourceType": "Computed",
+      "ContentRoot": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/projectbundle/",
+      "BasePath": "_content/Aishit",
+      "RelativePath": "Aishit.bundle.scp.css",
+      "AssetKind": "All",
+      "AssetMode": "Reference",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "ScopedCss",
+      "AssetTraitValue": "ProjectBundle",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "/workspaces/aishit/Aishit/obj/Debug/net8.0/scopedcss/projectbundle/Aishit.bundle.scp.css"
+    },
+    {
+      "Identity": "/workspaces/aishit/Aishit/wwwroot/app.css",
+      "SourceId": "Aishit",
+      "SourceType": "Discovered",
+      "ContentRoot": "/workspaces/aishit/Aishit/wwwroot/",
+      "BasePath": "_content/Aishit",
+      "RelativePath": "app.css",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "PreferTarget",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot/app.css"
+    }
+  ]
+}

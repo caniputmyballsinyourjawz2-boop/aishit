@@ -1,0 +1,283 @@
+@page "/summarizer"
+@using Aishit.Models
+@using Aishit.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject IAIService AIService
+@inject IFileProcessingService FileProcessor
+@rendermode InteractiveServer
+
+<PageTitle>AI Summarizer</PageTitle>
+
+<div class="container mt-4">
+    <h3>📝 Text Summarizer</h3>
+    
+    <div class="card mt-3">
+        <div class="card-body">
+            <h5 class="card-title">Upload File or Enter Text</h5>
+            
+            <!-- File Upload Section -->
+            <div class="mb-3">
+                <label for="fileInput" class="form-label">Upload File (PDF, DOCX, TXT):</label>
+                <InputFile 
+                    id="fileInput" 
+                    OnChange="HandleFileSelected" 
+                    class="form-control"
+                    accept=".txt,.pdf,.docx"
+                    disabled="@isProcessing" />
+                <small class="text-muted">
+                    Supported formats: PDF, DOCX, TXT (Max 10MB)
+                </small>
+            </div>
+
+            @if (isUploadingFile)
+            {
+                <div class="alert alert-info">
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    Processing file: @uploadedFileName
+                </div>
+            }
+
+            <div class="text-center my-3">
+                <strong>- OR -</strong>
+            </div>
+            
+            <!-- Text Input Section -->
+            <div class="mb-3">
+                <label for="textInput" class="form-label">Paste Text Directly:</label>
+                <textarea 
+                    class="form-control" 
+                    id="textInput" 
+                    rows="10" 
+                    @bind="inputText"
+                    placeholder="Paste your text here..."
+                    disabled="@isProcessing">
+                </textarea>
+                <small class="text-muted">
+                    Character count: @inputText.Length
+                </small>
+            </div>
+            
+            <div class="mb-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="LoadSampleText" disabled="@isProcessing">
+                    Load Sample Text
+                </button>
+            </div>
+            
+            <div class="btn-group">
+                <button 
+                    class="btn btn-primary" 
+                    @onclick="GenerateSummary"
+                    disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Generate Summary
+                </button>
+                
+                <button 
+                    class="btn btn-success" 
+                    @onclick="GenerateSummaryStreaming"
+                    disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                    @if (isStreaming)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Stream Summary
+                </button>
+                
+                <button 
+                    class="btn btn-secondary" 
+                    @onclick="Clear"
+                    disabled="@isProcessing">
+                    Clear All
+                </button>
+            </div>
+            
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3" role="alert">
+                    <strong>Error:</strong> @errorMessage
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="alert alert-success mt-3" role="alert">
+                    ✅ @successMessage
+                </div>
+            }
+        </div>
+    </div>
+    
+    @if (summary != null)
+    {
+        <div class="card mt-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">📄 Summary</h5>
+                @if (!string.IsNullOrEmpty(uploadedFileName))
+                {
+                    <small>From file: @uploadedFileName</small>
+                }
+            </div>
+            <div class="card-body">
+                <p class="lead">@summary.SummaryText</p>
+                
+                <hr />
+                
+                <h6 class="text-primary">🔑 Key Points:</h6>
+                <ul class="list-group list-group-flush mb-3">
+                    @foreach (var point in summary.KeyPoints)
+                    {
+                        <li class="list-group-item">@point</li>
+                    }
+                </ul>
+                
+                <h6 class="text-success">💡 Key Takeaways:</h6>
+                <p>@summary.KeyTakeaways</p>
+                
+                <small class="text-muted">
+                    Generated at: @summary.CreatedAt.ToString("g")
+                </small>
+            </div>
+        </div>
+    }
+    
+    @if (isStreaming && !string.IsNullOrEmpty(streamedContent))
+    {
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">📄 Summary (Streaming...)</h5>
+            </div>
+            <div class="card-body">
+                <div style="white-space: pre-wrap;">@streamedContent</div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string inputText = "";
+    private Summary? summary;
+    private string streamedContent = "";
+    private bool isProcessing = false;
+    private bool isStreaming = false;
+    private bool isUploadingFile = false;
+    private string errorMessage = "";
+    private string successMessage = "";
+    private string uploadedFileName = "";
+
+    private const long MaxFileSize = 10 * 1024 * 1024; // 10MB
+    
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        errorMessage = "";
+        successMessage = "";
+        isUploadingFile = true;
+        
+        try
+        {
+            var file = e.File;
+            uploadedFileName = file.Name;
+            
+            // Validate file size
+            if (file.Size > MaxFileSize)
+            {
+                errorMessage = $"File is too large. Maximum size is 10MB. Your file is {file.Size / 1024 / 1024}MB.";
+                return;
+            }
+            
+            // Validate file extension
+            var extension = Path.GetExtension(file.Name).ToLower();
+            if (extension != ".txt" && extension != ".pdf" && extension != ".docx")
+            {
+                errorMessage = "Unsupported file type. Please upload .txt, .pdf, or .docx files.";
+                return;
+            }
+            
+            // Read and extract text from file
+            using var stream = file.OpenReadStream(MaxFileSize);
+            inputText = await FileProcessor.ExtractTextFromFileAsync(stream, file.Name);
+            
+            if (string.IsNullOrWhiteSpace(inputText))
+            {
+                errorMessage = "No text could be extracted from the file. The file might be empty or corrupted.";
+                return;
+            }
+            
+            successMessage = $"Successfully loaded {inputText.Length} characters from {file.Name}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error processing file: {ex.Message}";
+            inputText = "";
+        }
+        finally
+        {
+            isUploadingFile = false;
+        }
+    }
+    
+    private async Task GenerateSummary()
+    {
+        isProcessing = true;
+        errorMessage = "";
+        successMessage = "";
+        summary = null;
+        
+        try
+        {
+            summary = await AIService.SummarizeAsync(inputText);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error generating summary: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+    
+    private async Task GenerateSummaryStreaming()
+    {
+        isStreaming = true;
+        errorMessage = "";
+        successMessage = "";
+        streamedContent = "";
+        summary = null;
+        
+        try
+        {
+            await foreach (var chunk in AIService.SummarizeStreamingAsync(inputText))
+            {
+                streamedContent += chunk;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error streaming summary: {ex.Message}";
+        }
+        finally
+        {
+            isStreaming = false;
+        }
+    }
+    
+    private void Clear()
+    {
+        inputText = "";
+        summary = null;
+        streamedContent = "";
+        errorMessage = "";
+        successMessage = "";
+        uploadedFileName = "";
+    }
+    
+    private void LoadSampleText()
+    {
+        uploadedFileName = "";
+        inputText = @"Artificial intelligence (AI) is transforming how we live and work. Machine learning algorithms can now analyze vast amounts of data to identify patterns and make predictions. Deep learning, a subset of machine learning, uses neural networks with multiple layers to process complex information. These technologies are being applied in healthcare for disease diagnosis, in finance for fraud detection, and in transportation for autonomous vehicles. However, AI also raises important ethical questions about privacy, bias, and the future of employment. As AI continues to advance, it's crucial that we develop it responsibly and ensure its benefits are shared broadly across society.";
+    }
+}
