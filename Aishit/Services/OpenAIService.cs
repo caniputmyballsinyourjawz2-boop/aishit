@@ -29,42 +29,46 @@ namespace Aishit.Services
             _chatClient = client.GetChatClient(_model);
         }
 
-        public async Task<Summary> SummarizeAsync(string text)
-        {
-            var messages = new List<ChatMessage>
-            {
-                new SystemChatMessage(@"You are a helpful study assistant that creates clear, structured summaries. 
+       public async Task<Summary> SummarizeAsync(string text)
+{
+    var messages = new List<ChatMessage>
+    {
+        new SystemChatMessage(@"You are a helpful study assistant that creates clear, structured, and DETAILED summaries. 
 Always respond with JSON in this exact format:
 {
-  ""summaryText"": ""A concise paragraph summary"",
-  ""keyPoints"": [""Point 1"", ""Point 2"", ""Point 3""],
-  ""keyTakeaways"": ""Main lessons or conclusions""
-}"),
-                new UserChatMessage($@"Summarize this text:{text}")
-            };
+  ""summaryText"": ""A comprehensive, detailed summary with multiple paragraphs. Include important context, explanations, and nuances. Aim for 5-8 sentences minimum to thoroughly cover the material."",
+  ""keyPoints"": [""Point 1"", ""Point 2"", ""Point 3"", ""Point 4"", ""Point 5""],
+  ""keyTakeaways"": ""Main lessons or conclusions with additional context""
+}
 
-            var options = new ChatCompletionOptions
-            {
-                Temperature = 0.7f,
-                ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
-            };
+IMPORTANT: The summaryText should be substantial and comprehensive. Don't just give a brief overview - provide enough detail that someone could understand the main concepts and important information without reading the original text."),
+        new UserChatMessage($@"Create a detailed, comprehensive summary of this text. The summary should be thorough and include important details, not just a brief overview:
 
-            var completion = await _chatClient.CompleteChatAsync(messages, options);
-            var jsonContent = completion.Value.Content[0].Text;
+{text}")
+    };
 
-            var summaryData = JsonSerializer.Deserialize<SummaryData>(jsonContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+    var options = new ChatCompletionOptions
+    {
+        Temperature = 0.7f,
+        ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+    };
 
-            return new Summary
-            {
-                OriginalText = text,
-                SummaryText = summaryData?.SummaryText ?? "",
-                KeyPoints = summaryData?.KeyPoints ?? new List<string>(),
-                KeyTakeaways = summaryData?.KeyTakeaways ?? ""
-            };
-        }
+    var completion = await _chatClient.CompleteChatAsync(messages, options);
+    var jsonContent = completion.Value.Content[0].Text;
+
+    var summaryData = JsonSerializer.Deserialize<SummaryData>(jsonContent, new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true
+    });
+
+    return new Summary
+    {
+        OriginalText = text,
+        SummaryText = summaryData?.SummaryText ?? "",
+        KeyPoints = summaryData?.KeyPoints ?? new List<string>(),
+        KeyTakeaways = summaryData?.KeyTakeaways ?? ""
+    };
+}
 
         public async IAsyncEnumerable<string> SummarizeStreamingAsync(string text)
         {
