@@ -40,9 +40,7 @@ Always respond with JSON in this exact format:
   ""keyPoints"": [""Point 1"", ""Point 2"", ""Point 3""],
   ""keyTakeaways"": ""Main lessons or conclusions""
 }"),
-                new UserChatMessage($@"Summarize this text:
-
-{text}")
+                new UserChatMessage($@"Summarize this text:{text}")
             };
 
             var options = new ChatCompletionOptions
@@ -144,7 +142,7 @@ Text:
             return wrapper?.Flashcards ?? new List<Flashcard>();
         }
 
-        public async Task<List<QuizQuestion>> GenerateQuizAsync(string text, int questionCount = 12)
+        public async Task<List<QuizQuestion>> GenerateQuizAsync(string text, int questionCount = 40)
         {
             int questionsPerType = questionCount / 4;
             

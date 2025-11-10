@@ -482,7 +482,7 @@
         
         try
         {
-            quizQuestions = await AIService.GenerateQuizAsync(inputText, 12);
+            quizQuestions = await AIService.GenerateQuizAsync(inputText, 40);
             successMessage = $"Generated {quizQuestions.Count} questions with mixed question types!";
         }
         catch (Exception ex)

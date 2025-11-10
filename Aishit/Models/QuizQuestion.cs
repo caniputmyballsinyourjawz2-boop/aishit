@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Aishit.Models
 {
     public class QuizQuestion
@@ -11,6 +13,7 @@ namespace Aishit.Models
         public string Explanation { get; set; } = string.Empty;
     }
 
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum QuestionType
     {
         MultipleChoice,
