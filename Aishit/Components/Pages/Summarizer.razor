@@ -1,6 +1,6 @@
 @page "/summarizer"
 @using Aishit.Models
-@using Aishit.Services
+@using Aishit.Services  <!-- This imports the ScenarioDifficulty enum -->
 @using Microsoft.AspNetCore.Components.Forms
 @inject IAIService AIService
 @inject IFileProcessingService FileProcessor
@@ -62,7 +62,25 @@
                     Load Sample Text
                 </button>
             </div>
-            
+            <div class="mb-3">
+    <label class="form-label fw-bold">Scenario Exam Difficulty:</label>
+    <div class="btn-group" role="group">
+        <input type="radio" class="btn-check" name="scenarioDifficulty" id="diffEasy" 
+               @onchange='() => scenarioDifficulty = ScenarioDifficulty.Easy' 
+               checked="@(scenarioDifficulty == ScenarioDifficulty.Easy)">
+        <label class="btn btn-outline-success" for="diffEasy">😊 Easy</label>
+
+        <input type="radio" class="btn-check" name="scenarioDifficulty" id="diffMedium" 
+               @onchange='() => scenarioDifficulty = ScenarioDifficulty.Medium' 
+               checked="@(scenarioDifficulty == ScenarioDifficulty.Medium)">
+        <label class="btn btn-outline-warning" for="diffMedium">🤔 Medium</label>
+
+        <input type="radio" class="btn-check" name="scenarioDifficulty" id="diffHard" 
+               @onchange='() => scenarioDifficulty = ScenarioDifficulty.Hard' 
+               checked="@(scenarioDifficulty == ScenarioDifficulty.Hard)">
+        <label class="btn btn-outline-danger" for="diffHard">🔥 Hard</label>
+    </div>
+</div>
             <!-- Action Buttons -->
             <div class="d-flex flex-wrap gap-2">
                 <button 
@@ -96,6 +114,17 @@
                         <span class="spinner-border spinner-border-sm me-2"></span>
                     }
                     📝 Generate Quiz
+                </button>
+
+                <button 
+                    class="btn btn-warning" 
+                    @onclick="GenerateScenarioExam"
+                    disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                    @if (isProcessing && currentAction == "scenario")
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    🎯 Scenario Exam
                 </button>
                 
                 <button 
@@ -335,6 +364,97 @@
             </div>
         </div>
     }
+
+    <!-- Scenario Exam Display -->
+    @if (scenarioExam?.Questions?.Any() == true)
+    {
+       <div class="card mt-4" style="background: linear-gradient(135deg, #f0f0f1 0%, #f8f8fa 100%);">
+            <div class="card-header text-white border-0">
+                <h5 class="mb-0">🎯 Scenario-Based Exam (@scenarioExam.Questions.Count Questions)</h5>
+                <small>Apply your knowledge to real-world situations</small>
+            </div>
+            <div class="card-body bg-white">
+                @foreach (var (scenario, sIndex) in scenarioExam.Questions.Select((s, i) => (s, i)))
+                {
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header" style="background-color: #e5e7eb; color: white;">
+                            <h6 class="mb-0">Scenario @(sIndex + 1)</h6>
+                        </div>
+                        <div class="card-body">
+                            <!-- Scenario Description -->
+                            <div class="alert alert-info mb-3">
+                                <strong>📖 Scenario:</strong>
+                                <p class="mb-0 mt-2">@scenario.Scenario</p>
+                            </div>
+
+                            <!-- Question -->
+                            <h6 class="text-primary mb-3">
+                                <strong>Question:</strong> @scenario.Question
+                            </h6>
+
+                            <!-- Answer Input -->
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Your Answer:</label>
+                                <textarea 
+                                    class="form-control" 
+                                    rows="4"
+                                    placeholder="Type your answer here..."
+                                    disabled="@scenario.IsGraded"
+                                    @bind="scenario.UserAnswer"
+                                    style="font-size: 14px;">
+                                </textarea>
+                                <small class="text-muted">Explain your reasoning clearly.</small>
+                            </div>
+
+                            <!-- Show Answer After Grading -->
+                            @if (scenario.IsGraded)
+                            {
+                                <div class="alert alert-success">
+                                    <strong>✓ Suggested Answer:</strong>
+                                    <p class="mb-2 mt-2">@scenario.SuggestedAnswer</p>
+                                    
+                                    <hr />
+                                    
+                                    <strong>🔑 Key Concepts:</strong>
+                                    <ul class="mb-0 mt-2">
+                                        @foreach (var concept in scenario.KeyConcepts)
+                                        {
+                                            <li>@concept</li>
+                                        }
+                                    </ul>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(scenario.UserAnswer))
+                                {
+                                    <div class="alert alert-secondary">
+                                        <strong>Your Answer:</strong>
+                                        <p class="mb-0 mt-2">@scenario.UserAnswer</p>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+                
+                @if (!scenarioExamSubmitted)
+                {
+                    <div class="d-grid">
+                        <button class="btn btn-primary btn-lg" @onclick="SubmitScenarioExam">
+                            📤 Submit Scenario Exam
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-grid">
+                        <button class="btn btn-secondary" @onclick="ResetScenarioExam">
+                            🔄 Generate New Scenarios
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
 </div>
 
 <style>
@@ -361,6 +481,7 @@
     private Summary? summary;
     private List<Flashcard>? flashcards;
     private List<QuizQuestion>? quizQuestions;
+    private ScenarioExamResult? scenarioExam;
     
     private bool isProcessing = false;
     private bool isUploadingFile = false;
@@ -376,6 +497,9 @@
     private Dictionary<int, string> selectedAnswers = new();
     private bool quizSubmitted = false;
 
+    // Scenario exam state
+    private bool scenarioExamSubmitted = false;
+private ScenarioDifficulty scenarioDifficulty = ScenarioDifficulty.Medium; 
     private const long MaxFileSize = 50 * 1024 * 1024; // 50MB
     
     private async Task HandleFileSelected(InputFileChangeEventArgs e)
@@ -482,7 +606,7 @@
         
         try
         {
-            quizQuestions = await AIService.GenerateQuizAsync(inputText, 40);
+            quizQuestions = await AIService.GenerateQuizAsync(inputText, 12);
             successMessage = $"Generated {quizQuestions.Count} questions with mixed question types!";
         }
         catch (Exception ex)
@@ -493,6 +617,49 @@
         {
             isProcessing = false;
         }
+    }
+
+    private async Task GenerateScenarioExam()
+{
+    isProcessing = true;
+    currentAction = "scenario";
+    errorMessage = "";
+    successMessage = "";
+    scenarioExam = null;
+    scenarioExamSubmitted = false;
+    
+    try
+    {
+        // Pass the difficulty parameter
+        scenarioExam = await AIService.GenerateScenarioExamAsync(inputText, 10, scenarioDifficulty);
+        successMessage = $"Generated {scenarioExam.Questions.Count} {scenarioDifficulty} scenario questions!";
+    }
+    catch (Exception ex)
+    {
+        errorMessage = $"Error generating scenario exam: {ex.Message}";
+    }
+    finally
+    {
+        isProcessing = false;
+    }
+}
+
+    private void SubmitScenarioExam()
+    {
+        if (scenarioExam?.Questions != null)
+        {
+            foreach (var question in scenarioExam.Questions)
+            {
+                question.IsGraded = true;
+            }
+            scenarioExamSubmitted = true;
+        }
+    }
+
+    private void ResetScenarioExam()
+    {
+        scenarioExam = null;
+        scenarioExamSubmitted = false;
     }
     
     private void FlipCard(int index)
@@ -575,11 +742,13 @@
         summary = null;
         flashcards = null;
         quizQuestions = null;
+        scenarioExam = null;
         errorMessage = "";
-        successMessage = "";
+       successMessage = "";
         uploadedFileName = "";
         flippedCards.Clear();
         ResetQuiz();
+        ResetScenarioExam();
     }
     
     private void LoadSampleText()

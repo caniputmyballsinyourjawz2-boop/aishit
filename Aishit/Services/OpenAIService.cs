@@ -29,8 +29,10 @@ namespace Aishit.Services
             _chatClient = client.GetChatClient(_model);
         }
 
-       public async Task<Summary> SummarizeAsync(string text)
+       public async Task<Summary> SummarizeAsync(string text, SummaryLength length = SummaryLength.Detailed)
 {
+    // You can ignore the 'length' parameter if you always want detailed summaries
+    
     var messages = new List<ChatMessage>
     {
         new SystemChatMessage(@"You are a helpful study assistant that creates clear, structured, and DETAILED summaries. 
@@ -238,5 +240,89 @@ Text:
         {
             public List<QuizQuestion> Questions { get; set; } = new();
         }
+
+    public async Task<ScenarioExamResult> GenerateScenarioExamAsync(
+    string text, 
+    int questionCount = 10, 
+    ScenarioDifficulty difficulty = ScenarioDifficulty.Medium)
+{
+    // Define difficulty instructions
+    var difficultyInstructions = difficulty switch
+    {
+        ScenarioDifficulty.Easy => @"
+            - Use simple, straightforward scenarios
+            - Focus on basic concepts and direct applications
+            - Keep scenarios short (1-2 sentences)
+            - Use familiar, everyday examples",
+        
+        ScenarioDifficulty.Medium => @"
+            - Use realistic, moderately complex scenarios
+            - Require connecting multiple concepts
+            - Scenarios should be 2-3 sentences
+            - Include some analysis and reasoning",
+        
+        ScenarioDifficulty.Hard => @"
+            - Use complex, multi-layered scenarios
+            - Require critical thinking and deep analysis
+            - Scenarios should be 3-4 sentences with multiple factors
+            - Include ethical considerations and real-world complexity
+            - Test higher-order thinking skills",
+        
+        _ => @"- Use realistic, moderately complex scenarios"
+    };
+
+    var messages = new List<ChatMessage>
+    {
+        new SystemChatMessage($@"You are an educational assessment expert that creates scenario-based exam questions.
+
+Create realistic, practical scenarios that require students to apply concepts from the material.
+
+Difficulty Level: {difficulty}
+{difficultyInstructions}
+
+Always respond with ONLY valid JSON in this exact format:
+{{
+  ""questions"": [
+    {{
+      ""scenario"": ""A detailed real-world scenario"",
+      ""question"": ""What concept/principle does this scenario demonstrate?"",
+      ""userAnswer"": """",
+      ""suggestedAnswer"": ""The expected answer with explanation"",
+      ""keyConcepts"": [""Concept 1"", ""Concept 2"", ""Concept 3""],
+      ""isGraded"": false
+    }}
+  ]
+}}"),
+        new UserChatMessage($@"Generate {questionCount} scenario-based exam questions from this text at {difficulty} difficulty level.
+
+Text:
+{text}")
+    };
+
+    var options = new ChatCompletionOptions
+    {
+        Temperature = 0.7f,
+        ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
+    };
+
+    var completion = await _chatClient.CompleteChatAsync(messages, options);
+    var jsonContent = completion.Value.Content[0].Text;
+
+    var wrapper = JsonSerializer.Deserialize<ScenarioExamWrapper>(jsonContent, new JsonSerializerOptions
+    {
+        PropertyNameCaseInsensitive = true
+    });
+
+    return new ScenarioExamResult
+    {
+        Questions = wrapper?.Questions ?? new List<ScenarioExam>()
+    };
+}
+
+// Add this helper class at the bottom with other helper classes
+private class ScenarioExamWrapper
+{
+    public List<ScenarioExam> Questions { get; set; } = new();
+}
     }
 }
