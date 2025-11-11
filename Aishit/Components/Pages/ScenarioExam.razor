@@ -1,0 +1,772 @@
+@page "/scenario"
+@using Aishit.Models
+@using Aishit.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject IAIService AIService
+@inject IFileProcessingService FileProcessor
+@rendermode InteractiveServer
+
+<PageTitle>Scenario Exam</PageTitle>
+
+<!-- Quiz Info Header -->
+<div class="quiz-info">
+    <div class="book-icon">📚</div>
+    <div class="quiz-details">
+        <h2>Quiz 1</h2>
+        <p class="subject">Human psychology 101</p>
+        <p class="source">Practice Workbook 1</p>
+        <p class="chapter">Chapter 1/ page 5</p>
+    </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Upload Section -->
+@if (scenarioExam == null || !scenarioExam.Questions.Any())
+{
+    <div class="upload-card">
+        <h3>Upload File or Enter Text</h3>
+        
+        <div class="upload-zone" @onclick="() => fileInput?.Click()">
+            <div class="upload-icon">📤</div>
+            <p class="upload-text">Click to upload or drag and drop</p>
+            <p class="upload-hint">PDF, DOCX, TXT (Max 50MB)</p>
+            <InputFile @ref="fileInput" OnChange="HandleFileSelected" accept=".txt,.pdf,.docx" style="display:none" disabled="@isProcessing" />
+        </div>
+
+        @if (isUploadingFile)
+        {
+            <div class="alert alert-info">
+                <span class="spinner">⏳</span>
+                Processing file: @uploadedFileName
+            </div>
+        }
+
+        <div class="or-divider">- OR -</div>
+
+        <textarea class="text-input" 
+                  rows="8" 
+                  @bind="inputText"
+                  placeholder="Paste your text here..."
+                  disabled="@isProcessing"></textarea>
+        
+        <div class="text-info">
+            <small>Character count: @inputText.Length</small>
+            <button class="btn-sample" @onclick="LoadSampleText" disabled="@isProcessing">
+                Load Sample Text
+            </button>
+        </div>
+
+        <!-- Difficulty Selector -->
+        <div class="difficulty-section">
+            <label class="difficulty-label">Scenario Exam Difficulty:</label>
+            <div class="difficulty-buttons">
+                <button class="diff-btn @(scenarioDifficulty == ScenarioDifficulty.Easy ? "active easy" : "easy")"
+                        @onclick="() => scenarioDifficulty = ScenarioDifficulty.Easy">
+                    😊 Easy
+                </button>
+                <button class="diff-btn @(scenarioDifficulty == ScenarioDifficulty.Medium ? "active medium" : "medium")"
+                        @onclick="() => scenarioDifficulty = ScenarioDifficulty.Medium">
+                    🤔 Medium
+                </button>
+                <button class="diff-btn @(scenarioDifficulty == ScenarioDifficulty.Hard ? "active hard" : "hard")"
+                        @onclick="() => scenarioDifficulty = ScenarioDifficulty.Hard">
+                    🔥 Hard
+                </button>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" @onclick="GenerateScenarioExam" disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                @if (isProcessing)
+                {
+                    <span class="spinner">⏳</span>
+                }
+                🎯 Generate Scenario Exam
+            </button>
+            <button class="btn btn-secondary" @onclick="Clear" disabled="@isProcessing">
+                🗑️ Clear All
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">
+                <strong>Error:</strong> @errorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">
+                ✅ @successMessage
+            </div>
+        }
+    </div>
+}
+
+<!-- Scenario Exam Display -->
+@if (scenarioExam?.Questions?.Any() == true)
+{
+    <div class="scenario-container">
+        <div class="scenario-header">
+            <h3>🎯 Scenario-Based Exam (@scenarioExam.Questions.Count Questions)</h3>
+            <p class="difficulty-badge @scenarioDifficulty.ToString().ToLower()">
+                @scenarioDifficulty Difficulty
+            </p>
+        </div>
+
+        <div class="scenarios-area">
+            @foreach (var (scenario, sIndex) in scenarioExam.Questions.Select((s, i) => (s, i)))
+            {
+                <div class="scenario-card">
+                    <div class="scenario-card-header">
+                        <h6>Scenario @(sIndex + 1)</h6>
+                    </div>
+                    
+                    <!-- Scenario Description -->
+                    <div class="scenario-description">
+                        <strong>📖 Scenario:</strong>
+                        <p>@scenario.Scenario</p>
+                    </div>
+
+                    <!-- Question -->
+                    <div class="scenario-question">
+                        <strong>Question:</strong> @scenario.Question
+                    </div>
+
+                    <!-- Answer Input -->
+                    <div class="answer-section">
+                        <label>Your Answer:</label>
+                        <textarea class="answer-input" 
+                                  rows="4"
+                                  placeholder="Type your answer here..."
+                                  disabled="@scenario.IsGraded"
+                                  @bind="scenario.UserAnswer"></textarea>
+                        <small>Explain your reasoning clearly.</small>
+                    </div>
+
+                    <!-- Show Answer After Grading -->
+                    @if (scenario.IsGraded)
+                    {
+                        <div class="graded-section">
+                            <div class="suggested-answer">
+                                <strong>✓ Suggested Answer:</strong>
+                                <p>@scenario.SuggestedAnswer</p>
+                            </div>
+                            
+                            <div class="key-concepts">
+                                <strong>🔑 Key Concepts:</strong>
+                                <ul>
+                                    @foreach (var concept in scenario.KeyConcepts)
+                                    {
+                                        <li>@concept</li>
+                                    }
+                                </ul>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(scenario.UserAnswer))
+                            {
+                                <div class="user-answer">
+                                    <strong>Your Answer:</strong>
+                                    <p>@scenario.UserAnswer</p>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="scenario-actions">
+            @if (!scenarioExamSubmitted)
+            {
+                <button class="btn-submit" @onclick="SubmitScenarioExam">
+                    📤 Submit Scenario Exam
+                </button>
+            }
+            else
+            {
+                <button class="btn-retake" @onclick="ResetScenarioExam">
+                    🔄 Generate New Scenarios
+                </button>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    /* Quiz Info */
+    .quiz-info {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .book-icon {
+        width: 70px;
+        height: 106px;
+        background: #364CFF;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+    }
+
+    .quiz-details h2 {
+        color: #7B9CE9;
+        font-size: 20px;
+        margin: 0 0 8px 0;
+    }
+
+    .quiz-details p {
+        color: white;
+        margin: 0;
+        font-size: 14px;
+    }
+
+    .subject {
+        font-size: 16px !important;
+        margin-bottom: 5px !important;
+    }
+
+    .divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        margin: 30px 0;
+    }
+
+    /* Upload Card */
+    .upload-card {
+        background: rgba(5, 5, 5, 0.4);
+        border-radius: 10px;
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+
+    .upload-card h3 {
+        color: white;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+
+    .upload-zone {
+        border: 2px dashed #364CFF;
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+    }
+
+    .upload-zone:hover {
+        border-color: #2E6FFF;
+        background: rgba(46, 111, 255, 0.05);
+    }
+
+    .upload-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+    }
+
+    .upload-text {
+        color: white;
+        font-size: 16px;
+        margin: 0 0 8px 0;
+    }
+
+    .upload-hint {
+        color: #7B9CE9;
+        font-size: 14px;
+        margin: 0;
+    }
+
+    .or-divider {
+        text-align: center;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        margin: 20px 0;
+    }
+
+    .text-input {
+        width: 100%;
+        min-height: 200px;
+        background: rgba(11, 21, 102, 0.3);
+        border: 1px solid #364CFF;
+        border-radius: 10px;
+        padding: 15px;
+        color: white;
+        font-size: 14px;
+        resize: vertical;
+        font-family: inherit;
+    }
+
+    .text-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 15px;
+    }
+
+    .text-info small {
+        color: #7B9CE9;
+    }
+
+    .btn-sample {
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid #364CFF;
+        border-radius: 5px;
+        color: #7B9CE9;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    /* Difficulty Section */
+    .difficulty-section {
+        margin: 30px 0;
+    }
+
+    .difficulty-label {
+        display: block;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        margin-bottom: 15px;
+    }
+
+    .difficulty-buttons {
+        display: flex;
+        gap: 15px;
+    }
+
+    .diff-btn {
+        flex: 1;
+        padding: 12px 24px;
+        border: 2px solid;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        background: transparent;
+    }
+
+    .diff-btn.easy {
+        border-color: #4CAF50;
+        color: #4CAF50;
+    }
+
+    .diff-btn.easy.active {
+        background: #4CAF50;
+        color: white;
+    }
+
+    .diff-btn.medium {
+        border-color: #FF9800;
+        color: #FF9800;
+    }
+
+    .diff-btn.medium.active {
+        background: #FF9800;
+        color: white;
+    }
+
+    .diff-btn.hard {
+        border-color: #F44336;
+        color: #F44336;
+    }
+
+    .diff-btn.hard.active {
+        background: #F44336;
+        color: white;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .btn-primary {
+        background: #2E6FFF;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #1E5FEF;
+        transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+        background: #757575;
+        color: white;
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Scenario Container */
+    .scenario-container {
+        background: rgba(23, 32, 108, 0.4);
+        border-radius: 10px;
+        padding: 30px;
+    }
+
+    .scenario-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .scenario-header h3 {
+        color: white;
+        font-size: 24px;
+        margin: 0;
+    }
+
+    .difficulty-badge {
+        padding: 8px 20px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .difficulty-badge.easy {
+        background: rgba(76, 175, 80, 0.3);
+        color: #4CAF50;
+        border: 2px solid #4CAF50;
+    }
+
+    .difficulty-badge.medium {
+        background: rgba(255, 152, 0, 0.3);
+        color: #FF9800;
+        border: 2px solid #FF9800;
+    }
+
+    .difficulty-badge.hard {
+        background: rgba(244, 67, 54, 0.3);
+        color: #F44336;
+        border: 2px solid #F44336;
+    }
+
+    .scenarios-area {
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+    }
+
+    .scenario-card {
+        background: rgba(0, 0, 0, 0.3);
+        border: 2px solid #364CFF;
+        border-radius: 10px;
+        padding: 25px;
+    }
+
+    .scenario-card-header h6 {
+        color: #7B9CE9;
+        font-size: 18px;
+        margin: 0 0 20px 0;
+    }
+
+    .scenario-description {
+        background: rgba(33, 150, 243, 0.2);
+        border: 1px solid #2196F3;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .scenario-description strong {
+        color: #90CAF9;
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .scenario-description p {
+        color: white;
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    .scenario-question {
+        color: white;
+        font-size: 18px;
+        margin-bottom: 20px;
+    }
+
+    .scenario-question strong {
+        color: #7B9CE9;
+    }
+
+    .answer-section {
+        margin-bottom: 20px;
+    }
+
+    .answer-section label {
+        display: block;
+        color: white;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    .answer-input {
+        width: 100%;
+        background: rgba(11, 21, 102, 0.3);
+        border: 1px solid #364CFF;
+        border-radius: 8px;
+        padding: 15px;
+        color: white;
+        font-size: 14px;
+        resize: vertical;
+        font-family: inherit;
+    }
+
+    .answer-section small {
+        color: #7B9CE9;
+        font-size: 12px;
+    }
+
+    .graded-section {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .suggested-answer {
+        background: rgba(76, 175, 80, 0.2);
+        border: 1px solid #4CAF50;
+        border-radius: 8px;
+        padding: 15px;
+    }
+
+    .suggested-answer strong {
+        color: #A5D6A7;
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .suggested-answer p {
+        color: white;
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    .key-concepts {
+        background: rgba(255, 193, 7, 0.2);
+        border: 1px solid #FFC107;
+        border-radius: 8px;
+        padding: 15px;
+    }
+
+    .key-concepts strong {
+        color: #FFE082;
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .key-concepts ul {
+        margin: 0;
+        padding-left: 20px;
+        color: white;
+    }
+
+    .user-answer {
+        background: rgba(158, 158, 158, 0.2);
+        border: 1px solid #9E9E9E;
+        border-radius: 8px;
+        padding: 15px;
+    }
+
+    .user-answer strong {
+        color: #E0E0E0;
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .user-answer p {
+        color: white;
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    .scenario-actions {
+        margin-top: 30px;
+        text-align: center;
+    }
+
+    .btn-submit, .btn-retake {
+        padding: 15px 50px;
+        background: linear-gradient(180deg, #0B1566 16%, #2E6CFF 92%);
+        border: none;
+        border-top: 2px solid #364CFF;
+        border-radius: 10px;
+        color: white;
+        font-size: 24px;
+        font-style: italic;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn-submit:hover, .btn-retake:hover {
+        background: linear-gradient(180deg, #1B2576 16%, #3E7DFF 92%);
+        transform: translateY(-2px);
+    }
+
+    .alert {
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+
+    .alert-info {
+        background: rgba(33, 150, 243, 0.2);
+        border: 1px solid #2196F3;
+        color: #90CAF9;
+    }
+
+    .alert-danger {
+        background: rgba(244, 67, 54, 0.2);
+        border: 1px solid #F44336;
+        color: #EF9A9A;
+    }
+
+    .alert-success {
+        background: rgba(76, 175, 80, 0.2);
+        border: 1px solid #4CAF50;
+        color: #A5D6A7;
+    }
+
+    .spinner {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    private InputFile? fileInput;
+    private string inputText = "";
+    private ScenarioExamResult? scenarioExam;
+    private bool scenarioExamSubmitted = false;
+    private ScenarioDifficulty scenarioDifficulty = ScenarioDifficulty.Medium;
+    private bool isProcessing = false;
+    private bool isUploadingFile = false;
+    private string errorMessage = "";
+    private string successMessage = "";
+    private string uploadedFileName = "";
+    private const long MaxFileSize = 50 * 1024 * 1024;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        errorMessage = "";
+        successMessage = "";
+        isUploadingFile = true;
+        
+        try
+        {
+            var file = e.File;
+            uploadedFileName = file.Name;
+            
+            if (file.Size > MaxFileSize)
+            {
+                errorMessage = $"File is too large. Maximum size is 50MB.";
+                return;
+            }
+            
+            using var stream = file.OpenReadStream(MaxFileSize);
+            inputText = await FileProcessor.ExtractTextFromFileAsync(stream, file.Name);
+            successMessage = $"Successfully loaded {inputText.Length} characters";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isUploadingFile = false;
+        }
+    }
+
+    private async Task GenerateScenarioExam()
+    {
+        isProcessing = true;
+        errorMessage = "";
+        successMessage = "";
+        scenarioExam = null;
+        scenarioExamSubmitted = false;
+        
+        try
+        {
+            scenarioExam = await AIService.GenerateScenarioExamAsync(inputText, 5, scenarioDifficulty);
+            successMessage = $"Generated {scenarioExam.Questions.Count} {scenarioDifficulty} scenario questions!";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void SubmitScenarioExam()
+    {
+        if (scenarioExam?.Questions != null)
+        {
+            foreach (var question in scenarioExam.Questions)
+            {
+                question.IsGraded = true;
+            }
+            scenarioExamSubmitted = true;
+        }
+    }
+
+    private void ResetScenarioExam()
+    {
+        scenarioExam = null;
+        scenarioExamSubmitted = false;
+    }
+
+    private void Clear()
+    {
+        inputText = "";
+        scenarioExam = null;
+        errorMessage = "";
+        successMessage = "";
+        uploadedFileName = "";
+        scenarioExamSubmitted = false;
+    }
+
+    private void LoadSampleText()
+    {
+        inputText = "Artificial intelligence (AI) is transforming how we live and work. Machine learning algorithms can now analyze vast amounts of data to identify patterns and make predictions. Deep learning uses neural networks with multiple layers to process complex information.";
+    }
+}

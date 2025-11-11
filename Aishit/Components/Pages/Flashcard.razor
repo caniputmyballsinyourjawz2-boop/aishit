@@ -1,0 +1,590 @@
+@page "/flashcard"
+@using Aishit.Models
+@using Aishit.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject IAIService AIService
+@inject IFileProcessingService FileProcessor
+@rendermode InteractiveServer
+
+<PageTitle>Flashcard</PageTitle>
+
+<!-- Quiz Info Header -->
+<div class="quiz-info">
+    <div class="book-icon">📚</div>
+    <div class="quiz-details">
+        <h2>Quiz 1</h2>
+        <p class="subject">Human psychology 101</p>
+        <p class="source">Practice Workbook 1</p>
+        <p class="chapter">Chapter 1/ page 5</p>
+    </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Upload Section (Collapsed by default when flashcards exist) -->
+@if (flashcards == null || !flashcards.Any())
+{
+    <div class="upload-card">
+        <h3>Upload File or Enter Text</h3>
+        
+        <div class="upload-zone" @onclick="() => fileInput?.Click()">
+            <div class="upload-icon">📤</div>
+            <p class="upload-text">Click to upload or drag and drop</p>
+            <p class="upload-hint">PDF, DOCX, TXT (Max 50MB)</p>
+            <InputFile @ref="fileInput" OnChange="HandleFileSelected" accept=".txt,.pdf,.docx" style="display:none" disabled="@isProcessing" />
+        </div>
+
+        @if (isUploadingFile)
+        {
+            <div class="alert alert-info">
+                <span class="spinner">⏳</span>
+                Processing file: @uploadedFileName
+            </div>
+        }
+
+        <div class="or-divider">- OR -</div>
+
+        <textarea class="text-input" 
+                  rows="8" 
+                  @bind="inputText"
+                  placeholder="Paste your text here..."
+                  disabled="@isProcessing"></textarea>
+        
+        <div class="text-info">
+            <small>Character count: @inputText.Length</small>
+            <button class="btn-sample" @onclick="LoadSampleText" disabled="@isProcessing">
+                Load Sample Text
+            </button>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" @onclick="GenerateFlashcards" disabled="@(string.IsNullOrWhiteSpace(inputText) || isProcessing)">
+                @if (isProcessing)
+                {
+                    <span class="spinner">⏳</span>
+                }
+                🎴 Create Flashcards
+            </button>
+            <button class="btn btn-secondary" @onclick="Clear" disabled="@isProcessing">
+                🗑️ Clear All
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">
+                <strong>Error:</strong> @errorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">
+                ✅ @successMessage
+            </div>
+        }
+    </div>
+}
+
+<!-- Flashcard Display -->
+@if (flashcards?.Any() == true && currentCardIndex < flashcards.Count)
+{
+    <div class="flashcard-container">
+        <div class="flashcard-header">
+            <h2>Flashcard</h2>
+        </div>
+
+        <div class="card-counter">
+            <h3>Question @(currentCardIndex + 1)</h3>
+            <p>@(currentCardIndex + 1) of @flashcards.Count</p>
+        </div>
+
+        <div class="flashcard-main @(isFlipped ? "flipped" : "")" @onclick="FlipCurrentCard">
+            <div class="flashcard-content">
+                @if (!isFlipped)
+                {
+                    <p class="card-text">@flashcards[currentCardIndex].Front</p>
+                }
+                else
+                {
+                    <p class="card-text">@flashcards[currentCardIndex].Back</p>
+                }
+            </div>
+        </div>
+
+        <div class="flashcard-controls">
+            <button class="btn-nav" @onclick="PreviousCard" disabled="@(currentCardIndex == 0)">
+                ← Previous
+            </button>
+            <button class="btn-continue" @onclick="NextCard">
+                @if (currentCardIndex < flashcards.Count - 1)
+                {
+                    <text>Continue</text>
+                }
+                else
+                {
+                    <text>Finish</text>
+                }
+            </button>
+            <button class="btn-nav" @onclick="NextCard" disabled="@(currentCardIndex >= flashcards.Count - 1)">
+                Next →
+            </button>
+        </div>
+
+        <div class="flashcard-actions">
+            <button class="btn btn-secondary" @onclick="ResetFlashcards">
+                🔄 Start Over
+            </button>
+            <button class="btn btn-primary" @onclick="() => { flashcards = null; currentCardIndex = 0; }">
+                📝 Generate New Flashcards
+            </button>
+        </div>
+    </div>
+}
+
+<style>
+    /* Quiz Info */
+    .quiz-info {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .book-icon {
+        width: 70px;
+        height: 106px;
+        background: #364CFF;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+    }
+
+    .quiz-details h2 {
+        color: #7B9CE9;
+        font-size: 20px;
+        margin: 0 0 8px 0;
+    }
+
+    .quiz-details p {
+        color: white;
+        margin: 0;
+        font-size: 14px;
+    }
+
+    .subject {
+        font-size: 16px !important;
+        margin-bottom: 5px !important;
+    }
+
+    .divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        margin: 30px 0;
+    }
+
+    /* Upload Card */
+    .upload-card {
+        background: rgba(5, 5, 5, 0.4);
+        border-radius: 10px;
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+
+    .upload-card h3 {
+        color: white;
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+
+    .upload-zone {
+        border: 2px dashed #364CFF;
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+    }
+
+    .upload-zone:hover {
+        border-color: #2E6FFF;
+        background: rgba(46, 111, 255, 0.05);
+    }
+
+    .upload-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+    }
+
+    .upload-text {
+        color: white;
+        font-size: 16px;
+        margin: 0 0 8px 0;
+    }
+
+    .upload-hint {
+        color: #7B9CE9;
+        font-size: 14px;
+        margin: 0;
+    }
+
+    .or-divider {
+        text-align: center;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        margin: 20px 0;
+    }
+
+    .text-input {
+        width: 100%;
+        min-height: 200px;
+        background: rgba(11, 21, 102, 0.3);
+        border: 1px solid #364CFF;
+        border-radius: 10px;
+        padding: 15px;
+        color: white;
+        font-size: 14px;
+        resize: vertical;
+        font-family: inherit;
+    }
+
+    .text-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 15px;
+    }
+
+    .text-info small {
+        color: #7B9CE9;
+    }
+
+    .btn-sample {
+        padding: 8px 16px;
+        background: transparent;
+        border: 1px solid #364CFF;
+        border-radius: 5px;
+        color: #7B9CE9;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .btn-primary {
+        background: #2E6FFF;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #1E5FEF;
+        transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+        background: #757575;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #656565;
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Flashcard Container */
+    .flashcard-container {
+        background: rgba(23, 32, 108, 0.4);
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+    }
+
+    .flashcard-header h2 {
+        color: #161E66;
+        font-size: 50px;
+        font-weight: 400;
+        letter-spacing: 1px;
+        margin: 0 0 30px 0;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .card-counter h3 {
+        color: white;
+        font-size: 50px;
+        font-weight: 400;
+        letter-spacing: 1px;
+        margin: 0 0 10px 0;
+    }
+
+    .card-counter p {
+        color: #7B9CE9;
+        font-size: 18px;
+        margin: 0 0 40px 0;
+    }
+
+    .flashcard-main {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 10px;
+        padding: 60px 40px;
+        min-height: 400px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-bottom: 30px;
+    }
+
+    .flashcard-main:hover {
+        background: rgba(0, 0, 0, 0.5);
+        transform: scale(1.02);
+    }
+
+    .flashcard-main.flipped {
+        background: linear-gradient(135deg, rgba(46, 111, 255, 0.2) 0%, rgba(11, 21, 102, 0.3) 100%);
+    }
+
+    .flashcard-content {
+        width: 100%;
+    }
+
+    .card-text {
+        color: white;
+        font-size: 48px;
+        font-weight: 400;
+        line-height: 1.4;
+        margin: 0;
+    }
+
+    .flashcard-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .btn-nav {
+        padding: 10px 20px;
+        background: transparent;
+        border: 2px solid #364CFF;
+        border-radius: 8px;
+        color: #7B9CE9;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-nav:hover:not(:disabled) {
+        background: rgba(54, 76, 255, 0.2);
+        color: white;
+    }
+
+    .btn-nav:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .btn-continue {
+        padding: 15px 50px;
+        background: linear-gradient(180deg, #0B1566 16%, #2E6CFF 92%);
+        border: none;
+        border-top: 2px solid #364CFF;
+        border-radius: 10px;
+        color: white;
+        font-size: 24px;
+        font-style: italic;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .btn-continue:hover {
+        background: linear-gradient(180deg, #1B2576 16%, #3E7DFF 92%);
+        transform: translateY(-2px);
+    }
+
+    .flashcard-actions {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+    }
+
+    .alert {
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+    }
+
+    .alert-info {
+        background: rgba(33, 150, 243, 0.2);
+        border: 1px solid #2196F3;
+        color: #90CAF9;
+    }
+
+    .alert-danger {
+        background: rgba(244, 67, 54, 0.2);
+        border: 1px solid #F44336;
+        color: #EF9A9A;
+    }
+
+    .alert-success {
+        background: rgba(76, 175, 80, 0.2);
+        border: 1px solid #4CAF50;
+        color: #A5D6A7;
+    }
+
+    .spinner {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    private InputFile? fileInput;
+    private string inputText = "";
+    private List<Flashcard>? flashcards;
+    private int currentCardIndex = 0;
+    private bool isFlipped = false;
+    private bool isProcessing = false;
+    private bool isUploadingFile = false;
+    private string errorMessage = "";
+    private string successMessage = "";
+    private string uploadedFileName = "";
+    private const long MaxFileSize = 50 * 1024 * 1024;
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        errorMessage = "";
+        successMessage = "";
+        isUploadingFile = true;
+        
+        try
+        {
+            var file = e.File;
+            uploadedFileName = file.Name;
+            
+            if (file.Size > MaxFileSize)
+            {
+                errorMessage = $"File is too large. Maximum size is 50MB.";
+                return;
+            }
+            
+            using var stream = file.OpenReadStream(MaxFileSize);
+            inputText = await FileProcessor.ExtractTextFromFileAsync(stream, file.Name);
+            successMessage = $"Successfully loaded {inputText.Length} characters";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isUploadingFile = false;
+        }
+    }
+
+    private async Task GenerateFlashcards()
+    {
+        isProcessing = true;
+        errorMessage = "";
+        successMessage = "";
+        flashcards = null;
+        
+        try
+        {
+            flashcards = await AIService.GenerateFlashcardsAsync(inputText, 10);
+            currentCardIndex = 0;
+            isFlipped = false;
+            successMessage = $"Generated {flashcards.Count} flashcards!";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void FlipCurrentCard()
+    {
+        isFlipped = !isFlipped;
+    }
+
+    private void NextCard()
+    {
+        if (flashcards != null && currentCardIndex < flashcards.Count - 1)
+        {
+            currentCardIndex++;
+            isFlipped = false;
+        }
+        else if (currentCardIndex == flashcards?.Count - 1)
+        {
+            // Finished all cards
+            currentCardIndex = 0;
+            isFlipped = false;
+        }
+    }
+
+    private void PreviousCard()
+    {
+        if (currentCardIndex > 0)
+        {
+            currentCardIndex--;
+            isFlipped = false;
+        }
+    }
+
+    private void ResetFlashcards()
+    {
+        currentCardIndex = 0;
+        isFlipped = false;
+    }
+
+    private void Clear()
+    {
+        inputText = "";
+        flashcards = null;
+        errorMessage = "";
+        successMessage = "";
+        uploadedFileName = "";
+        currentCardIndex = 0;
+        isFlipped = false;
+    }
+
+    private void LoadSampleText()
+    {
+        inputText = "Artificial intelligence (AI) is transforming how we live and work. Machine learning algorithms can now analyze vast amounts of data to identify patterns and make predictions. Deep learning uses neural networks with multiple layers to process complex information.";
+    }
+}
